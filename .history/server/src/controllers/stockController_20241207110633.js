@@ -1,7 +1,10 @@
 // controllers/stockController.js  
-const CompanyService = require('../services/companyService');
+const CompanyService = require('../services/companyService');  
 
+// Add this to your existing stockController  
 const stockController = {  
+    // ... existing methods ...  
+
     refreshCompanies: async (req, res) => {  
         try {  
             const result = await CompanyService.refreshSP500List();  
@@ -25,5 +28,3 @@ const stockController = {
         }  
     }  
 };  
-
-module.exports = stockController;

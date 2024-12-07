@@ -8,10 +8,5 @@ const stockController = require('../controllers/stockController');
 router.post('/companies/refresh', auth, stockController.refreshCompanies);  
 router.get('/companies/active', stockController.getActiveCompanies);  
 
-// Health check route
-router.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-});
-
 // Export the router  
-module.exports = router;
+module.exports = router;  

@@ -1,4 +1,5 @@
 // app.js  
+
 const CompanyService = require('./services/companyService');  
 
 // Add this with your other cron jobs  
