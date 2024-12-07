@@ -108,21 +108,6 @@ class CompanyService {
             throw error;  
         }  
     }  
-
-    static async updateCompany(ticker, companyData) {
-        try {
-            const company = await Company.findByPk(ticker);
-            if (!company) {
-                throw new Error('Company not found');
-            }
-
-            await company.update(companyData);
-            return company;
-        } catch (error) {
-            console.error(`Error updating company ${ticker}:`, error);
-            throw error;
-        }
-    }
 }  
 
-module.exports = CompanyService;
+module.exports = CompanyService;  

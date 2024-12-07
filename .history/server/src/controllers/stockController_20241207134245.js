@@ -66,22 +66,6 @@ const stockController = {
             console.error('Error in getActiveCompanies:', error);
             res.status(500).json({ error: error.message });
         }
-    },
-
-    updateCompany: async (req, res) => {
-        try {
-            const { ticker } = req.params;
-            const companyData = req.body;
-            
-            const updatedCompany = await CompanyService.updateCompany(ticker, companyData);
-            res.json({
-                message: 'Company updated successfully',
-                company: updatedCompany
-            });
-        } catch (error) {
-            console.error('Error in updateCompany:', error);
-            res.status(500).json({ error: error.message });
-        }
     }
 };
 

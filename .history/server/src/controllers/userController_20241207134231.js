@@ -1,14 +1,5 @@
 // src/controllers/userController.js
 const userController = {
-    getAllUsers: async (req, res) => {
-        try {
-            // Return empty array for now since user implementation is pending
-            res.status(200).json([]);
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
-    },
-
     register: async (req, res) => {
         try {
             // TODO: Implement user registration
