@@ -14,127 +14,81 @@ class StockPriceService {
 
   static async fetchWithRetry(ticker, queryOptions, retryCount = 0) {
     try {
-      console.log(`[${ticker}] Initiating data fetch with options:`, queryOptions);
-      
-      // Add delay before each request to avoid rate limiting
-      await this.sleep(3000);
-      
+      console.log(`Fetching data for ${ticker}...`);
       const result = await yahooFinance.chart(ticker, queryOptions);
       
-      if (!result) {
-        console.warn(`[${ticker}] Yahoo Finance returned null/undefined result`);
+      if (!result || !result.quotes) {
+        console.warn(`No data structure returned from Yahoo Finance for ${ticker}`);
         return [];
       }
 
-      if (!result.quotes) {
-        console.warn(`[${ticker}] Yahoo Finance result missing quotes array`);
+      if (result.quotes.length === 0) {
+        console.warn(`Empty quotes array returned from Yahoo Finance for ${ticker}`);
         return [];
       }
 
-      console.log(`[${ticker}] Successfully fetched ${result.quotes.length} raw quotes`);
+      console.log(`Received ${result.quotes.length} raw quotes for ${ticker}`);
       
-      const validQuotes = result.quotes
-        .filter(quote => {
-          if (!quote) {
-            console.warn(`[${ticker}] Skipping null/undefined quote`);
-            return false;
-          }
+      const validQuotes = result.quotes.map(quote => {
+        if (!quote.timestamp) {
+          console.warn(`Quote missing timestamp for ${ticker}`);
+          return null;
+        }
+        
+        const date = new Date(quote.timestamp * 1000);
+        if (isNaN(date.getTime())) {
+          console.warn(`Invalid date from timestamp ${quote.timestamp} for ${ticker}`);
+          return null;
+        }
 
-          let date;
-          // Handle both timestamp and date fields
-          if (quote.timestamp) {
-            date = new Date(quote.timestamp * 1000);
-          } else if (quote.date) {
-            date = new Date(quote.date);
-          } else {
-            console.warn(`[${ticker}] Quote missing both timestamp and date:`, JSON.stringify(quote));
-            return false;
-          }
+        // Log any missing price data
+        if (!quote.close) {
+          console.warn(`Missing close price for ${ticker} on ${date.toISOString()}`);
+        }
 
-          // Validate the date
-          if (isNaN(date.getTime())) {
-            console.warn(`[${ticker}] Invalid date: ${date}`);
-            return false;
-          }
+        return {
+          date,
+          open: quote.open || null,
+          high: quote.high || null,
+          low: quote.low || null,
+          close: quote.close || null,
+          volume: quote.volume || null,
+          adjClose: quote.adjclose || null
+        };
+      }).filter(quote => quote !== null);
 
-          // Ensure the date falls within our query period
-          if (date < queryOptions.period1 || date > queryOptions.period2) {
-            console.warn(`[${ticker}] Quote date ${date.toISOString()} outside query period`);
-            return false;
-          }
-
-          if (!quote.close && !quote.adjclose) {
-            console.warn(`[${ticker}] Missing price data for ${date.toISOString()}`);
-            return false;
-          }
-
-          return true;
-        })
-        .map(quote => {
-          // Use either timestamp or date field
-          const date = quote.timestamp ? 
-            new Date(quote.timestamp * 1000) : 
-            new Date(quote.date);
-
-          return {
-            date,
-            open: quote.open || null,
-            high: quote.high || null,
-            low: quote.low || null,
-            close: quote.close || null,
-            volume: quote.volume || null,
-            adjClose: quote.adjclose || quote.close || null
-          };
-        });
-
-      const invalidCount = result.quotes.length - validQuotes.length;
-      console.log(`[${ticker}] Processed ${validQuotes.length} valid quotes (${invalidCount} invalid) out of ${result.quotes.length} total`);
-      
-      if (validQuotes.length === 0) {
-        console.warn(`[${ticker}] No valid quotes found after filtering`);
-      }
-
+      console.log(`Processed ${validQuotes.length} valid quotes for ${ticker}`);
       return validQuotes;
 
     } catch (error) {
-      console.error(`[${ticker}] Error fetching data:`, error.message);
+      console.error(`Error fetching data for ${ticker}:`, error.message);
       
-      const retryableErrors = [
-        'Too Many Requests',
-        'not valid JSON',
-        'timeout',
-        'socket hang up',
-        'ECONNRESET',
-        'EAI_AGAIN'
-      ];
-
-      const shouldRetry = retryableErrors.some(msg => error.message.includes(msg));
-      
-      if (shouldRetry && retryCount < 3) {
-        const waitTime = Math.pow(2, retryCount) * 60000; // Increased to 1-minute base wait time
-        console.log(`[${ticker}] Will retry in ${waitTime/1000} seconds (Attempt ${retryCount + 1}/3)`);
-        await this.sleep(waitTime);
-        return this.fetchWithRetry(ticker, queryOptions, retryCount + 1);
+      if (error.message.includes('Too Many Requests') || 
+          error.message.includes('not valid JSON') ||
+          error.message.includes('timeout')) {
+        
+        if (retryCount < 3) {  // Reduced max retries
+          const waitTime = Math.pow(2, retryCount) * 45000;  // Increased base wait time to 45 seconds
+          console.log(`Rate limited for ${ticker}, waiting ${waitTime/1000} seconds and retrying... (Attempt ${retryCount + 1}/3)`);
+          await this.sleep(waitTime);
+          return this.fetchWithRetry(ticker, queryOptions, retryCount + 1);
+        }
       }
-
       throw error;
     }
   }
 
-  // Rest of the class implementation remains unchanged
   static async updateOrCreateStockPrice(data) {
     try {
-      if (!data.ticker || !data.date) {
-        console.warn('Missing required data:', { ticker: data.ticker, date: data.date });
+      if (!data.date || isNaN(data.date.getTime())) {
+        console.warn(`Invalid date for ticker ${data.ticker}`);
         return null;
       }
 
-      if (isNaN(data.date.getTime())) {
-        console.warn(`Invalid date for ticker ${data.ticker}: ${data.date}`);
+      if (!data.close && !data.adjusted_close) {
+        console.warn(`No price data for ${data.ticker} on ${data.date}`);
         return null;
       }
-
-      console.log(`[${data.ticker}] Updating/creating price for ${data.date.toISOString()}`);
 
       const [stockPrice, created] = await db.StockPrice.findOrCreate({
         where: {
@@ -147,7 +101,7 @@ class StockPriceService {
           low: data.low,
           close: data.close,
           volume: data.volume,
-          adjusted_close: data.adjusted_close || data.adjClose
+          adjusted_close: data.adjusted_close
         }
       });
 
@@ -158,12 +112,8 @@ class StockPriceService {
           low: data.low !== null ? data.low : stockPrice.low,
           close: data.close !== null ? data.close : stockPrice.close,
           volume: data.volume !== null ? data.volume : stockPrice.volume,
-          adjusted_close: (data.adjusted_close || data.adjClose) !== null ? 
-            (data.adjusted_close || data.adjClose) : stockPrice.adjusted_close
+          adjusted_close: data.adjusted_close !== null ? data.adjusted_close : stockPrice.adjusted_close
         });
-        console.log(`[${data.ticker}] Updated existing price record for ${data.date.toISOString()}`);
-      } else {
-        console.log(`[${data.ticker}] Created new price record for ${data.date.toISOString()}`);
       }
 
       return stockPrice;
@@ -177,7 +127,6 @@ class StockPriceService {
     const results = [];
     console.log(`Processing historical batch of ${companies.length} companies`);
     
-    // Process one company at a time
     for (const company of companies) {
       try {
         console.log(`\nProcessing historical data for ${company.ticker}`);
@@ -188,15 +137,11 @@ class StockPriceService {
           interval: '1d'
         };
 
-        console.log(`[${company.ticker}] Query options:`, queryOptions);
-
+        await this.sleep(2000); // 2 second delay between each stock
         const historicalData = await this.fetchWithRetry(company.ticker, queryOptions);
         let processedCount = 0;
         let errorCount = 0;
 
-        console.log(`[${company.ticker}] Processing ${historicalData.length} historical records`);
-
-        // Process data points with small delays between each
         for (const data of historicalData) {
           try {
             const result = await this.updateOrCreateStockPrice({
@@ -207,20 +152,16 @@ class StockPriceService {
               low: data.low,
               close: data.close,
               volume: data.volume,
-              adjClose: data.adjClose
+              adjusted_close: data.adjClose
             });
             
             if (result) {
               processedCount++;
-              if (processedCount % 50 === 0) {
-                // Add small delay every 50 records
-                await this.sleep(1000);
-              }
             } else {
               errorCount++;
             }
           } catch (error) {
-            console.error(`[${company.ticker}] Error processing data point for ${data.date}:`, error);
+            console.error(`Error processing data point for ${company.ticker} at ${data.date}:`, error);
             errorCount++;
             continue;
           }
@@ -232,12 +173,9 @@ class StockPriceService {
           recordsProcessed: processedCount,
           recordsError: errorCount
         });
-        console.log(`[${company.ticker}] Completed: ${processedCount} processed, ${errorCount} errors`);
-        
-        // Add longer delay between companies
-        await this.sleep(5000);
+        console.log(`Processed ${processedCount} records (${errorCount} errors) for ${company.ticker}`);
       } catch (error) {
-        console.error(`[${company.ticker}] Failed to process historical data:`, error);
+        console.error(`Error processing historical data for ${company.ticker}:`, error);
         results.push({
           success: false,
           ticker: company.ticker,
@@ -250,8 +188,6 @@ class StockPriceService {
 
   static async updateHistoricalDataForAllCompanies() {  
     try {  
-      console.log('Starting historical data update for all companies');
-      
       const companies = await db.Company.findAll({  
         where: { active: true },  
         attributes: ['ticker']  
@@ -271,8 +207,8 @@ class StockPriceService {
         timestamp: new Date()
       };  
 
-      // Process in very small batches
-      const batchSize = 2; // Reduced to just 2 companies per batch
+      // Process in smaller batches
+      const batchSize = 5; // Reduced batch size
       const totalBatches = Math.ceil(companies.length/batchSize);
       
       for (let i = 0; i < companies.length; i += batchSize) {
@@ -303,7 +239,7 @@ class StockPriceService {
 
         // Longer delay between batches
         if (i + batchSize < companies.length) {
-          const waitTime = 30000; // Increased to 30 seconds between batches
+          const waitTime = 15000; // 15 second delay between batches
           console.log(`Waiting ${waitTime/1000} seconds between batches...`);
           await this.sleep(waitTime);
         }
@@ -313,8 +249,7 @@ class StockPriceService {
         companiesProcessed: results.success,
         companiesFailed: results.failed,
         totalRecordsProcessed: results.totalRecordsProcessed,
-        totalRecordsError: results.totalRecordsError,
-        errors: results.errors
+        totalRecordsError: results.totalRecordsError
       });
 
       return results;  
@@ -332,21 +267,17 @@ class StockPriceService {
     const results = [];
     for (const company of companies) {
       try {
-        console.log(`[${company.ticker}] Fetching daily data`);
-        
-        // Add delay before each request
-        await this.sleep(2000);
-        
+        console.log(`Fetching daily data for ${company.ticker}`);
         const quote = await yahooFinance.quote(company.ticker);
         
         if (!quote) {
-          console.warn(`[${company.ticker}] No quote data returned`);
+          console.warn(`No quote data returned for ${company.ticker}`);
           results.push({ success: false, ticker: company.ticker, error: 'No quote data returned' });
           continue;
         }
 
         if (!quote.regularMarketPrice) {
-          console.warn(`[${company.ticker}] No market price available`);
+          console.warn(`No market price available for ${company.ticker}`);
           results.push({ success: false, ticker: company.ticker, error: 'No market price available' });
           continue;
         }
@@ -368,24 +299,25 @@ class StockPriceService {
           price: quote.regularMarketPrice
         });
         
-        console.log(`[${company.ticker}] Updated daily price: $${quote.regularMarketPrice}`);
+        console.log(`Successfully updated daily price for ${company.ticker}: $${quote.regularMarketPrice}`);
         
       } catch (error) {
-        console.error(`[${company.ticker}] Error processing daily price:`, error);
+        console.error(`Error processing daily price for ${company.ticker}:`, error);
         results.push({ 
           success: false, 
           ticker: company.ticker, 
           error: error.message 
         });
       }
+      
+      // Small delay between each company
+      await this.sleep(1000);
     }
     return results;
   }
 
   static async updateDailyPrices() {  
     try {  
-      console.log('Starting daily price update for all companies');
-      
       const companies = await db.Company.findAll({  
         where: { active: true },  
         attributes: ['ticker']  
@@ -404,7 +336,7 @@ class StockPriceService {
       };  
 
       // Process in smaller batches
-      const batchSize = 5; // Reduced batch size
+      const batchSize = 10; // Reduced batch size for better rate limiting
       const totalBatches = Math.ceil(companies.length/batchSize);
       
       for (let i = 0; i < companies.length; i += batchSize) {
@@ -414,10 +346,13 @@ class StockPriceService {
         
         const batchResults = await this.processDailyPriceBatch(batch, today);
         
+        // Process results
         batchResults.forEach(result => {
           if (result.success) {
             results.success++;
-            console.log(`Updated ${result.ticker} price: $${result.price}`);
+            if (result.price) {
+              console.log(`Updated ${result.ticker} price: $${result.price}`);
+            }
           } else {
             results.failed++;
             results.errors.push({
@@ -428,9 +363,9 @@ class StockPriceService {
           }
         });
 
-        // Longer delay between batches
+        // Delay between batches
         if (i + batchSize < companies.length) {
-          const waitTime = 10000; // Increased to 10 seconds between batches
+          const waitTime = 5000; // 5 second delay between batches
           console.log(`Waiting ${waitTime/1000} seconds between batches...`);
           await this.sleep(waitTime);
         }
@@ -438,8 +373,7 @@ class StockPriceService {
 
       console.log('\nFinal Results:', {
         companiesProcessed: results.success,
-        companiesFailed: results.failed,
-        errors: results.errors
+        companiesFailed: results.failed
       });
 
       return results;  

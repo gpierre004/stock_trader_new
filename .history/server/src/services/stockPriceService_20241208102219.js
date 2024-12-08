@@ -35,47 +35,26 @@ class StockPriceService {
       
       const validQuotes = result.quotes
         .filter(quote => {
-          if (!quote) {
-            console.warn(`[${ticker}] Skipping null/undefined quote`);
+          if (!quote || !quote.timestamp) {
+            console.warn(`[${ticker}] Skipping quote due to missing timestamp`);
             return false;
           }
-
-          let date;
-          // Handle both timestamp and date fields
-          if (quote.timestamp) {
-            date = new Date(quote.timestamp * 1000);
-          } else if (quote.date) {
-            date = new Date(quote.date);
-          } else {
-            console.warn(`[${ticker}] Quote missing both timestamp and date:`, JSON.stringify(quote));
-            return false;
-          }
-
-          // Validate the date
+          
+          const date = new Date(quote.timestamp * 1000);
           if (isNaN(date.getTime())) {
-            console.warn(`[${ticker}] Invalid date: ${date}`);
-            return false;
-          }
-
-          // Ensure the date falls within our query period
-          if (date < queryOptions.period1 || date > queryOptions.period2) {
-            console.warn(`[${ticker}] Quote date ${date.toISOString()} outside query period`);
+            console.warn(`[${ticker}] Skipping quote due to invalid timestamp: ${quote.timestamp}`);
             return false;
           }
 
           if (!quote.close && !quote.adjclose) {
-            console.warn(`[${ticker}] Missing price data for ${date.toISOString()}`);
+            console.warn(`[${ticker}] Skipping quote due to missing price data for ${date.toISOString()}`);
             return false;
           }
 
           return true;
         })
         .map(quote => {
-          // Use either timestamp or date field
-          const date = quote.timestamp ? 
-            new Date(quote.timestamp * 1000) : 
-            new Date(quote.date);
-
+          const date = new Date(quote.timestamp * 1000);
           return {
             date,
             open: quote.open || null,
@@ -87,13 +66,7 @@ class StockPriceService {
           };
         });
 
-      const invalidCount = result.quotes.length - validQuotes.length;
-      console.log(`[${ticker}] Processed ${validQuotes.length} valid quotes (${invalidCount} invalid) out of ${result.quotes.length} total`);
-      
-      if (validQuotes.length === 0) {
-        console.warn(`[${ticker}] No valid quotes found after filtering`);
-      }
-
+      console.log(`[${ticker}] Processed ${validQuotes.length} valid quotes out of ${result.quotes.length} total`);
       return validQuotes;
 
     } catch (error) {
@@ -121,7 +94,6 @@ class StockPriceService {
     }
   }
 
-  // Rest of the class implementation remains unchanged
   static async updateOrCreateStockPrice(data) {
     try {
       if (!data.ticker || !data.date) {

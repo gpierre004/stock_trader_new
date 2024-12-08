@@ -35,25 +35,27 @@ class StockPriceService {
       
       const validQuotes = result.quotes
         .filter(quote => {
+          // Enhanced validation and logging
           if (!quote) {
             console.warn(`[${ticker}] Skipping null/undefined quote`);
             return false;
           }
 
-          let date;
-          // Handle both timestamp and date fields
-          if (quote.timestamp) {
-            date = new Date(quote.timestamp * 1000);
-          } else if (quote.date) {
-            date = new Date(quote.date);
-          } else {
-            console.warn(`[${ticker}] Quote missing both timestamp and date:`, JSON.stringify(quote));
+          // Log the raw quote data for debugging
+          if (!quote.timestamp) {
+            console.warn(`[${ticker}] Quote missing timestamp:`, JSON.stringify(quote));
+            return false;
+          }
+          
+          // Validate timestamp is a number and creates valid date
+          if (typeof quote.timestamp !== 'number') {
+            console.warn(`[${ticker}] Invalid timestamp type: ${typeof quote.timestamp}`);
             return false;
           }
 
-          // Validate the date
+          const date = new Date(quote.timestamp * 1000);
           if (isNaN(date.getTime())) {
-            console.warn(`[${ticker}] Invalid date: ${date}`);
+            console.warn(`[${ticker}] Invalid date from timestamp ${quote.timestamp}: ${date}`);
             return false;
           }
 
@@ -71,11 +73,7 @@ class StockPriceService {
           return true;
         })
         .map(quote => {
-          // Use either timestamp or date field
-          const date = quote.timestamp ? 
-            new Date(quote.timestamp * 1000) : 
-            new Date(quote.date);
-
+          const date = new Date(quote.timestamp * 1000);
           return {
             date,
             open: quote.open || null,

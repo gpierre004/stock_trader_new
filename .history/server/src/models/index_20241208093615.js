@@ -19,8 +19,7 @@ const db = {
   sequelize,  
   Sequelize,
   Company: require('./company')(sequelize, Sequelize),
-  StockPrice: require('./stockPrice')(sequelize, Sequelize),
-  MarketMover: require('./marketMover')(sequelize, Sequelize)
+  StockPrice: require('./stockPrice')(sequelize, Sequelize)
 };  
 
 // Set up associations if needed
@@ -29,9 +28,6 @@ if (db.Company.associate) {
 }
 if (db.StockPrice.associate) {
   db.StockPrice.associate(db);
-}
-if (db.MarketMover.associate) {
-  db.MarketMover.associate(db);
 }
 
 module.exports = db;

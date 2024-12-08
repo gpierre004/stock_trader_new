@@ -15,10 +15,6 @@ class StockPriceService {
   static async fetchWithRetry(ticker, queryOptions, retryCount = 0) {
     try {
       console.log(`[${ticker}] Initiating data fetch with options:`, queryOptions);
-      
-      // Add delay before each request to avoid rate limiting
-      await this.sleep(3000);
-      
       const result = await yahooFinance.chart(ticker, queryOptions);
       
       if (!result) {
@@ -35,47 +31,26 @@ class StockPriceService {
       
       const validQuotes = result.quotes
         .filter(quote => {
-          if (!quote) {
-            console.warn(`[${ticker}] Skipping null/undefined quote`);
+          if (!quote || !quote.timestamp) {
+            console.warn(`[${ticker}] Skipping quote due to missing timestamp`);
             return false;
           }
-
-          let date;
-          // Handle both timestamp and date fields
-          if (quote.timestamp) {
-            date = new Date(quote.timestamp * 1000);
-          } else if (quote.date) {
-            date = new Date(quote.date);
-          } else {
-            console.warn(`[${ticker}] Quote missing both timestamp and date:`, JSON.stringify(quote));
-            return false;
-          }
-
-          // Validate the date
+          
+          const date = new Date(quote.timestamp * 1000);
           if (isNaN(date.getTime())) {
-            console.warn(`[${ticker}] Invalid date: ${date}`);
-            return false;
-          }
-
-          // Ensure the date falls within our query period
-          if (date < queryOptions.period1 || date > queryOptions.period2) {
-            console.warn(`[${ticker}] Quote date ${date.toISOString()} outside query period`);
+            console.warn(`[${ticker}] Skipping quote due to invalid timestamp: ${quote.timestamp}`);
             return false;
           }
 
           if (!quote.close && !quote.adjclose) {
-            console.warn(`[${ticker}] Missing price data for ${date.toISOString()}`);
+            console.warn(`[${ticker}] Skipping quote due to missing price data for ${date.toISOString()}`);
             return false;
           }
 
           return true;
         })
         .map(quote => {
-          // Use either timestamp or date field
-          const date = quote.timestamp ? 
-            new Date(quote.timestamp * 1000) : 
-            new Date(quote.date);
-
+          const date = new Date(quote.timestamp * 1000);
           return {
             date,
             open: quote.open || null,
@@ -87,13 +62,7 @@ class StockPriceService {
           };
         });
 
-      const invalidCount = result.quotes.length - validQuotes.length;
-      console.log(`[${ticker}] Processed ${validQuotes.length} valid quotes (${invalidCount} invalid) out of ${result.quotes.length} total`);
-      
-      if (validQuotes.length === 0) {
-        console.warn(`[${ticker}] No valid quotes found after filtering`);
-      }
-
+      console.log(`[${ticker}] Processed ${validQuotes.length} valid quotes out of ${result.quotes.length} total`);
       return validQuotes;
 
     } catch (error) {
@@ -104,14 +73,13 @@ class StockPriceService {
         'not valid JSON',
         'timeout',
         'socket hang up',
-        'ECONNRESET',
-        'EAI_AGAIN'
+        'ECONNRESET'
       ];
 
       const shouldRetry = retryableErrors.some(msg => error.message.includes(msg));
       
       if (shouldRetry && retryCount < 3) {
-        const waitTime = Math.pow(2, retryCount) * 60000; // Increased to 1-minute base wait time
+        const waitTime = Math.pow(2, retryCount) * 45000;
         console.log(`[${ticker}] Will retry in ${waitTime/1000} seconds (Attempt ${retryCount + 1}/3)`);
         await this.sleep(waitTime);
         return this.fetchWithRetry(ticker, queryOptions, retryCount + 1);
@@ -121,7 +89,6 @@ class StockPriceService {
     }
   }
 
-  // Rest of the class implementation remains unchanged
   static async updateOrCreateStockPrice(data) {
     try {
       if (!data.ticker || !data.date) {
@@ -177,7 +144,6 @@ class StockPriceService {
     const results = [];
     console.log(`Processing historical batch of ${companies.length} companies`);
     
-    // Process one company at a time
     for (const company of companies) {
       try {
         console.log(`\nProcessing historical data for ${company.ticker}`);
@@ -190,13 +156,13 @@ class StockPriceService {
 
         console.log(`[${company.ticker}] Query options:`, queryOptions);
 
+        await this.sleep(2000); // 2 second delay between each stock
         const historicalData = await this.fetchWithRetry(company.ticker, queryOptions);
         let processedCount = 0;
         let errorCount = 0;
 
         console.log(`[${company.ticker}] Processing ${historicalData.length} historical records`);
 
-        // Process data points with small delays between each
         for (const data of historicalData) {
           try {
             const result = await this.updateOrCreateStockPrice({
@@ -212,10 +178,6 @@ class StockPriceService {
             
             if (result) {
               processedCount++;
-              if (processedCount % 50 === 0) {
-                // Add small delay every 50 records
-                await this.sleep(1000);
-              }
             } else {
               errorCount++;
             }
@@ -233,9 +195,6 @@ class StockPriceService {
           recordsError: errorCount
         });
         console.log(`[${company.ticker}] Completed: ${processedCount} processed, ${errorCount} errors`);
-        
-        // Add longer delay between companies
-        await this.sleep(5000);
       } catch (error) {
         console.error(`[${company.ticker}] Failed to process historical data:`, error);
         results.push({
@@ -271,8 +230,8 @@ class StockPriceService {
         timestamp: new Date()
       };  
 
-      // Process in very small batches
-      const batchSize = 2; // Reduced to just 2 companies per batch
+      // Process in smaller batches
+      const batchSize = 5;
       const totalBatches = Math.ceil(companies.length/batchSize);
       
       for (let i = 0; i < companies.length; i += batchSize) {
@@ -303,7 +262,7 @@ class StockPriceService {
 
         // Longer delay between batches
         if (i + batchSize < companies.length) {
-          const waitTime = 30000; // Increased to 30 seconds between batches
+          const waitTime = 15000;
           console.log(`Waiting ${waitTime/1000} seconds between batches...`);
           await this.sleep(waitTime);
         }
@@ -333,10 +292,6 @@ class StockPriceService {
     for (const company of companies) {
       try {
         console.log(`[${company.ticker}] Fetching daily data`);
-        
-        // Add delay before each request
-        await this.sleep(2000);
-        
         const quote = await yahooFinance.quote(company.ticker);
         
         if (!quote) {
@@ -378,6 +333,8 @@ class StockPriceService {
           error: error.message 
         });
       }
+      
+      await this.sleep(1000);
     }
     return results;
   }
@@ -403,8 +360,7 @@ class StockPriceService {
         timestamp: new Date()
       };  
 
-      // Process in smaller batches
-      const batchSize = 5; // Reduced batch size
+      const batchSize = 10;
       const totalBatches = Math.ceil(companies.length/batchSize);
       
       for (let i = 0; i < companies.length; i += batchSize) {
@@ -428,9 +384,8 @@ class StockPriceService {
           }
         });
 
-        // Longer delay between batches
         if (i + batchSize < companies.length) {
-          const waitTime = 10000; // Increased to 10 seconds between batches
+          const waitTime = 5000;
           console.log(`Waiting ${waitTime/1000} seconds between batches...`);
           await this.sleep(waitTime);
         }

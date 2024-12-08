@@ -1,9 +1,14 @@
 // src/models/company.js
 module.exports = (sequelize, DataTypes) => {
   const Company = sequelize.define('Company', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
     ticker: {
       type: DataTypes.STRING(10),
-      primaryKey: true,
+      unique: true,
       allowNull: false
     },
     name: {
@@ -12,10 +17,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     sector: DataTypes.STRING,
     industry: DataTypes.STRING,
-    active: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true
-    }
+    market_cap: DataTypes.DECIMAL(15, 2)
   }, {
     tableName: 'companies',
     underscored: true
