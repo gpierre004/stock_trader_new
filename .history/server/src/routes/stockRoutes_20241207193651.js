@@ -22,7 +22,7 @@ router.get('companies/refresh-sp500', stockController.refreshCompanies); // Lega
 router.post('/update-market-data', async (req, res) => {
     try {
         // Perform stock price update
-        const stockPriceUpdateResult = await StockPriceService.updateDailyPrices();
+        const stockPriceUpdateResult = await StockPriceService.updateStockPrices();
         
         // Calculate market movers
         const marketMoversResult = await MarketMoverService.calculateMarketMovers();

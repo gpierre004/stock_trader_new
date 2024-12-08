@@ -3,8 +3,6 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const stockController = require('../controllers/stockController');
-const StockPriceService = require('../services/stockPriceService');
-const MarketMoverService = require('../services/marketMoverService');
 
 // Stock market data routes
 router.get('/quotes/:symbol', stockController.getQuote);
@@ -18,11 +16,11 @@ router.get('refresh-sp500', stockController.refreshCompanies); // Handle without
 router.get('/companies/refresh-sp500', stockController.refreshCompanies); // Legacy pattern support
 router.get('companies/refresh-sp500', stockController.refreshCompanies); // Legacy pattern without leading slash
 
-// New route for manual market data update - temporarily without auth for testing
-router.post('/update-market-data', async (req, res) => {
+// New route for manual market data update
+router.post('/update-market-data', auth, async (req, res) => {
     try {
         // Perform stock price update
-        const stockPriceUpdateResult = await StockPriceService.updateDailyPrices();
+        const stockPriceUpdateResult = await StockPriceService.updateStockPrices();
         
         // Calculate market movers
         const marketMoversResult = await MarketMoverService.calculateMarketMovers();

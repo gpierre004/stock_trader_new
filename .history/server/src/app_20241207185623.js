@@ -65,7 +65,6 @@ const startServer = async () => {
         MarketDataJobs.initializeJobs();  
         initializeWatchlistJob();
         initializeCompanyUpdateJob();
-        StockPriceJobs.initializeJobs();
 
         app.listen(PORT, () => {
             console.log('=================================');

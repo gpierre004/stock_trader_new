@@ -1,7 +1,5 @@
 // src/controllers/stockController.js
 const CompanyService = require('../services/companyService');
-const MarketMoverService = require('../services/marketMoverService');
-const StockPriceService = require('../services/stockPriceService');
 
 const stockController = {
     getQuote: async (req, res) => {
@@ -28,8 +26,8 @@ const stockController = {
 
     getMarketMovers: async (req, res) => {
         try {
-            const marketMovers = await MarketMoverService.getTopMovers();
-            res.json(marketMovers);
+            // TODO: Implement market movers
+            res.status(501).json({ message: 'Market movers not implemented yet' });
         } catch (error) {
             console.error('Error in getMarketMovers:', error);
             res.status(500).json({ error: error.message });
@@ -83,29 +81,6 @@ const stockController = {
         } catch (error) {
             console.error('Error in updateCompany:', error);
             res.status(500).json({ error: error.message });
-        }
-    },
-
-    // New method for manual market data update
-    updateMarketData: async (req, res) => {
-        try {
-            // Perform stock price update
-            const stockPriceUpdateResult = await StockPriceService.updateStockPrices();
-            
-            // Calculate market movers
-            const marketMoversResult = await MarketMoverService.calculateMarketMovers();
-
-            res.json({
-                message: 'Market data updated successfully',
-                stockPriceUpdate: stockPriceUpdateResult,
-                marketMoversUpdate: marketMoversResult
-            });
-        } catch (error) {
-            console.error('Error updating market data:', error);
-            res.status(500).json({ 
-                message: 'Failed to update market data', 
-                error: error.message 
-            });
         }
     }
 };

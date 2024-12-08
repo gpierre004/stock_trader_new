@@ -5,16 +5,11 @@ const cors = require('cors');
 const helmet = require('helmet');  
 const rateLimit = require('express-rate-limit');  
 const routes = require('./routes/index.js');  
-const { sequelize } = require('./models');  
+const { sequelize, testConnection } = require('./models');  
 const stockController = require('./controllers/stockController');  
 const watchlistController = require('./controllers/watchlistController');  
 const MarketDataJobs = require('./jobs/marketDataJobs');  
 const { initializeCompanyUpdateJob } = require('./jobs/companyUpdateJob');
-const { initializeWatchlistJob } = require('./jobs/watchlistJob');
-const StockPriceJobs = require('./jobs/stockPriceJobs');
-
-// Suppress punycode deprecation warning
-process.noDeprecation = true;
 
 const app = express();  
 
@@ -50,8 +45,7 @@ const startServer = async () => {
     const PORT = process.env.PORT || 3001;    
     try {  
         // Test database connection  
-        await sequelize.authenticate();
-        console.log('Database connection established successfully');
+        await testConnection();  
         
         // Sync database models  
         await sequelize.sync({   
@@ -63,25 +57,18 @@ const startServer = async () => {
         
         // Initialize all cron jobs  
         MarketDataJobs.initializeJobs();  
-        initializeWatchlistJob();
+        watchlistController.initializeWatchlistCron();
         initializeCompanyUpdateJob();
-        StockPriceJobs.initializeJobs();
 
         app.listen(PORT, () => {
-            console.log('=================================');
-            console.log(`🚀 Server is running on port ${PORT}`);
-            console.log(`📍 Local: http://localhost:${PORT}`);
-            console.log(`🔌 API endpoints: http://localhost:${PORT}/api`);
-            console.log('📊 Market data updates: weekdays 9:30 AM - 4:00 PM ET');
-            console.log('=================================');
+            console.log(`Server is running on http://localhost:${PORT}`);
+            console.log(`API endpoints available at http://localhost:${PORT}/api`);
+            console.log('Market data updates scheduled for weekdays 9:30 AM - 4:00 PM ET');
         });
     } catch (error) {  
         console.error('Failed to start server:', error);  
         process.exit(1);  
     }  
 };
-
-// Start the server
-startServer();
 
 module.exports = app;

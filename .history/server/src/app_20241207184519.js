@@ -10,8 +10,6 @@ const stockController = require('./controllers/stockController');
 const watchlistController = require('./controllers/watchlistController');  
 const MarketDataJobs = require('./jobs/marketDataJobs');  
 const { initializeCompanyUpdateJob } = require('./jobs/companyUpdateJob');
-const { initializeWatchlistJob } = require('./jobs/watchlistJob');
-const StockPriceJobs = require('./jobs/stockPriceJobs');
 
 // Suppress punycode deprecation warning
 process.noDeprecation = true;
@@ -50,8 +48,7 @@ const startServer = async () => {
     const PORT = process.env.PORT || 3001;    
     try {  
         // Test database connection  
-        await sequelize.authenticate();
-        console.log('Database connection established successfully');
+        await testConnection();  
         
         // Sync database models  
         await sequelize.sync({   
@@ -63,9 +60,8 @@ const startServer = async () => {
         
         // Initialize all cron jobs  
         MarketDataJobs.initializeJobs();  
-        initializeWatchlistJob();
+        watchlistController.initializeWatchlistCron();
         initializeCompanyUpdateJob();
-        StockPriceJobs.initializeJobs();
 
         app.listen(PORT, () => {
             console.log('=================================');
