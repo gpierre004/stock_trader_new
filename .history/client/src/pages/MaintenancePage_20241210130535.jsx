@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Button, TextField, Typography, Paper, Grid } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import useAuth from '../hooks/useAuth';
 
 const MaintenancePage = () => {
   const [formData, setFormData] = useState({
@@ -14,14 +12,6 @@ const MaintenancePage = () => {
   });
 
   const [message, setMessage] = useState('');
-  const { isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    }
-  }, [isAuthenticated, navigate]);
 
   const handleInputChange = (e) => {
     setFormData({
@@ -37,23 +27,16 @@ const MaintenancePage = () => {
       setMessage('Transaction added successfully');
       setFormData({ ticker: '', quantity: '', price: '', type: '', date: '' });
     } catch (error) {
-      setMessage(error.response?.data?.error || 'Error adding transaction');
+      setMessage('Error adding transaction');
     }
   };
 
   const handleLoadTemplateData = async () => {
     try {
-      const response = await api.post('/transactions/load-template');
+      await api.post('/transactions/load-template');
       setMessage('Template data loaded successfully');
-      console.log('Template load response:', response.data);
     } catch (error) {
-      if (error.response?.status === 401) {
-        setMessage('Please log in to load template data');
-        navigate('/login');
-      } else {
-        setMessage(error.response?.data?.error || 'Error loading template data');
-        console.error('Template load error:', error);
-      }
+      setMessage('Error loading template data');
     }
   };
 
@@ -62,12 +45,7 @@ const MaintenancePage = () => {
       await api.post('/maintenance/update-market-data');
       setMessage('Market data updated successfully');
     } catch (error) {
-      if (error.response?.status === 401) {
-        setMessage('Please log in to update market data');
-        navigate('/login');
-      } else {
-        setMessage(error.response?.data?.error || 'Error updating market data');
-      }
+      setMessage('Error updating market data');
     }
   };
 
@@ -76,12 +54,7 @@ const MaintenancePage = () => {
       await api.post('/maintenance/update-watchlist');
       setMessage('Watchlist updated successfully');
     } catch (error) {
-      if (error.response?.status === 401) {
-        setMessage('Please log in to update watchlist');
-        navigate('/login');
-      } else {
-        setMessage(error.response?.data?.error || 'Error updating watchlist');
-      }
+      setMessage('Error updating watchlist');
     }
   };
 
@@ -118,7 +91,7 @@ const MaintenancePage = () => {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField
                   label="Ticker"
-                  name="ticker"
+                  name='ticker'
                   value={formData.ticker}
                   onChange={handleInputChange}
                   required
@@ -140,7 +113,7 @@ const MaintenancePage = () => {
                   required
                 />
                 <TextField
-                  label="Type (BUY/SELL)"
+                  label="Type (/sell)"
                   name="type"
                   value={formData.type}
                   onChange={handleInputChange}
@@ -165,10 +138,7 @@ const MaintenancePage = () => {
       </Grid>
 
       {message && (
-        <Typography 
-          color={message.includes('Error') || message.includes('Please log in') ? 'error' : 'primary'} 
-          sx={{ mt: 2 }}
-        >
+        <Typography color="primary" sx={{ mt: 2 }}>
           {message}
         </Typography>
       )}

@@ -32,16 +32,10 @@ exports.loadTemplateData = async (req, res) => {
       const tickerValue = row.ticker || row.symbol || null;
       const type = row.comment?.includes('BOUGHT') ? 'BUY' : 'SELL';
       const purchase_date = row.purchase_date || row.date || null;
-      const portfolio_id = row.portfolio_id || null;
 
       if (!tickerValue) {
         console.error('Missing ticker/symbol in row:', row);
         throw new Error('Missing ticker/symbol in data');
-      }
-
-      if (!portfolio_id) {
-        console.error('Missing portfolio_id in row:', row);
-        throw new Error('Missing portfolio_id in data');
       }
 
       const transformedRow = {
@@ -53,8 +47,7 @@ exports.loadTemplateData = async (req, res) => {
         remaining_shares: parseFloat(row.quantity),
         current_price: parseFloat(row.purchase_price || row.price),
         cost_basis: parseFloat(row.quantity) * parseFloat(row.purchase_price || row.price),
-        comment: row.comment,
-        portfolio_id: portfolio_id
+        comment: row.comment
       };
 
       console.log('Transformed row:', transformedRow);
@@ -64,7 +57,7 @@ exports.loadTemplateData = async (req, res) => {
     console.log('Transformed data:', JSON.stringify(transformedData, null, 2));
 
     // Validate required fields
-    const requiredFields = ['ticker', 'quantity', 'purchase_price', 'type', 'purchase_date', 'portfolio_id'];
+    const requiredFields = ['ticker', 'quantity', 'purchase_price', 'type', 'purchase_date'];
     const firstRow = transformedData[0];
     const missingFields = requiredFields.filter(field => 
       !firstRow[field] || firstRow[field] === undefined || firstRow[field] === null
@@ -87,7 +80,10 @@ exports.loadTemplateData = async (req, res) => {
       try {
         console.log('Attempting to insert row:', JSON.stringify(row, null, 2));
         
-        const transaction = await db.Transaction.create(row);
+        const transaction = await db.Transaction.create({
+          ...row,
+          portfolio_id: req.user.id
+        });
 
         console.log('Successfully inserted transaction:', JSON.stringify(transaction, null, 2));
         results.success++;
