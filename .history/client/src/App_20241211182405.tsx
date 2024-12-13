@@ -5,7 +5,7 @@ import store from './store/store';
 import AppRoutes from './routes/AppRoutes';
 import './App.css';
 
-function App() {
+const App: React.FC = () => {
   return (
     <Provider store={store}>
       <BrowserRouter>
