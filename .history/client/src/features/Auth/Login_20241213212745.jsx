@@ -9,11 +9,7 @@ const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });  
   const [error, setError] = useState('');
   const dispatch = useDispatch();  
-  const navigate = useNavigate();
-  const location = useLocation();
-  
-  // Get the redirect path from state, or default to dashboard
-  const from = location.state?.from?.pathname || '/dashboard';
+  const navigate = useNavigate();  
 
   const handleChange = (e) => {  
     const { name, value } = e.target;  
@@ -36,8 +32,8 @@ const Login = () => {
       }
       
       if (result.payload) {  
-        console.log('Login successful, navigating to:', from);
-        navigate(from);  
+        console.log('Login successful, navigating to dashboard');
+        navigate('/dashboard');  
       } else {
         console.error('Login failed: No payload in result');
         setError('Login failed. Please try again.');

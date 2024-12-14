@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Button, TextField, Typography, Paper, Grid } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import useAuth from '../hooks/useAuth';
 import maintenanceService from '../services/maintenanceService';
 
 const MaintenancePage = () => {
@@ -13,6 +15,14 @@ const MaintenancePage = () => {
   });
 
   const [message, setMessage] = useState('');
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleInputChange = (e) => {
     setFormData({
@@ -38,8 +48,13 @@ const MaintenancePage = () => {
       setMessage('Template data loaded successfully');
       console.log('Template load response:', response.data);
     } catch (error) {
-      setMessage(error.response?.data?.error || 'Error loading template data');
-      console.error('Template load error:', error);
+      if (error.response?.status === 401) {
+        setMessage('Please log in to load template data');
+        navigate('/login');
+      } else {
+        setMessage(error.response?.data?.error || 'Error loading template data');
+        console.error('Template load error:', error);
+      }
     }
   };
 
@@ -48,7 +63,12 @@ const MaintenancePage = () => {
       await api.post('/maintenance/update-market-data');
       setMessage('Market data updated successfully');
     } catch (error) {
-      setMessage(error.response?.data?.error || 'Error updating market data');
+      if (error.response?.status === 401) {
+        setMessage('Please log in to update market data');
+        navigate('/login');
+      } else {
+        setMessage(error.response?.data?.error || 'Error updating market data');
+      }
     }
   };
 
@@ -57,7 +77,12 @@ const MaintenancePage = () => {
       await api.post('/maintenance/update-watchlist');
       setMessage('Watchlist updated successfully');
     } catch (error) {
-      setMessage(error.response?.data?.error || 'Error updating watchlist');
+      if (error.response?.status === 401) {
+        setMessage('Please log in to update watchlist');
+        navigate('/login');
+      } else {
+        setMessage(error.response?.data?.error || 'Error updating watchlist');
+      }
     }
   };
 
@@ -66,7 +91,12 @@ const MaintenancePage = () => {
       const result = await maintenanceService.syncMissingCompanies();
       setMessage(`Companies synced successfully. ${result.inserted} companies added.`);
     } catch (error) {
-      setMessage(error.response?.data?.error || 'Error syncing companies');
+      if (error.response?.status === 401) {
+        setMessage('Please log in to sync companies');
+        navigate('/login');
+      } else {
+        setMessage(error.response?.data?.error || 'Error syncing companies');
+      }
     }
   };
 
@@ -154,7 +184,7 @@ const MaintenancePage = () => {
 
       {message && (
         <Typography 
-          color={message.includes('Error') ? 'error' : 'primary'} 
+          color={message.includes('Error') || message.includes('Please log in') ? 'error' : 'primary'} 
           sx={{ mt: 2 }}
         >
           {message}

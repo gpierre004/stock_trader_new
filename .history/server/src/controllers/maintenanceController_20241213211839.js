@@ -24,10 +24,33 @@ exports.updateWatchlist = async (req, res) => {
 
 exports.syncMissingCompanies = async (req, res) => {
     try {
-        const result = await MaintenanceService.syncMissingCompanies();
+        // Get unique tickers from transactions that don't exist in companies
+        const [missingTickers] = await sequelize.query(`
+            SELECT DISTINCT t.ticker 
+            FROM transactions t 
+            LEFT JOIN companies c ON t.ticker = c.ticker 
+            WHERE c.ticker IS NULL
+        `);
+
+        if (missingTickers.length === 0) {
+            return res.json({ message: 'No missing companies found' });
+        }
+
+        // Insert missing tickers into companies table
+        const companiesToInsert = missingTickers.map(({ ticker }) => ({
+            ticker,
+            name: ticker, // Using ticker as name temporarily
+            active: true,
+            created_at: new Date(),
+            updated_at: new Date()
+        }));
+
+        await Company.bulkCreate(companiesToInsert);
+
         res.json({ 
             message: 'Missing companies synced successfully',
-            ...result
+            inserted: companiesToInsert.length,
+            tickers: companiesToInsert.map(c => c.ticker)
         });
     } catch (error) {
         console.error('Error syncing missing companies:', error);
