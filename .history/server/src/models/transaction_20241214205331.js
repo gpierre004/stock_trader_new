@@ -49,21 +49,17 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true
   });
 
-  Transaction.associate = function(models) {
+  Transaction.associate = (models) => {
     Transaction.belongsTo(models.User, {
       foreignKey: 'portfolio_id',
       as: 'user',
       targetKey: 'id'
     });
 
-    // Only set up the association if CashTransaction exists in models
-    if (models.CashTransaction) {
-      Transaction.hasOne(models.CashTransaction, {
-        foreignKey: 'related_stock_transaction_id',
-        sourceKey: 'purchase_id',
-        as: 'CashTransaction'  // Changed back to match model name casing
-      });
-    }
+    Transaction.hasOne(models.CashTransaction, {
+      foreignKey: 'related_stock_transaction_id',
+      as: 'CashTransaction'
+    });
   };
 
   return Transaction;

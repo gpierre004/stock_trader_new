@@ -61,7 +61,7 @@ module.exports = (sequelize, DataTypes) => {
       Transaction.hasOne(models.CashTransaction, {
         foreignKey: 'related_stock_transaction_id',
         sourceKey: 'purchase_id',
-        as: 'CashTransaction'  // Changed back to match model name casing
+        as: 'cashTransaction'
       });
     }
   };

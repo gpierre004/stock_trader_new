@@ -38,7 +38,6 @@ router.use('/transactions', transactionRoutes);
 router.use('/watchlists', watchlistRoutes);
 router.use('/maintenance', maintenanceRoutes);
 router.use('/market-data', marketDataRoutes);
-router.use('/cash', cashRoutes);
 
 // Debug route to list all registered routes
 router.get('/routes', (req, res) => {

@@ -45,7 +45,7 @@ exports.loadTemplateData = async (req, res) => {
         ticker: tickerValue.trim(),
         quantity: parseFloat(row.quantity),
         purchase_price: parseFloat(row.purchase_price || row.price),
-        type: type.trim(),
+        type: type,
         purchase_date: purchase_date ? purchase_date.trim() : null,
         remaining_shares: parseFloat(row.quantity),
         current_price: parseFloat(row.purchase_price || row.price),
@@ -85,7 +85,7 @@ exports.loadTemplateData = async (req, res) => {
 
         // Calculate cash impact
         const cashAmount = row.quantity * row.purchase_price;
-        const isBuy = row.type.trim() === 'BUY';
+        const isBuy = row.type === 'BUY';
         
         // Update user's cash balance
         currentBalance += isBuy ? -cashAmount : cashAmount;
@@ -97,7 +97,7 @@ exports.loadTemplateData = async (req, res) => {
           amount: isBuy ? -cashAmount : cashAmount,
           balance_after: currentBalance,
           related_stock_transaction_id: transaction.purchase_id,
-          description: `${row.type.trim()} ${row.quantity} shares of ${row.ticker} at ${row.purchase_price}`
+          description: `${row.type} ${row.quantity} shares of ${row.ticker} at ${row.purchase_price}`
         }, { transaction: t });
 
         results.success++;
@@ -149,7 +149,7 @@ exports.createTransaction = async (req, res) => {
     }
 
     const validTypes = ['BUY', 'SELL'];
-    const upperType = type.trim().toUpperCase();
+    const upperType = type.toUpperCase();
     if (!validTypes.includes(upperType)) {
       return res.status(400).json({ 
         error: 'Invalid transaction type. Must be either BUY or SELL.' 
@@ -266,8 +266,9 @@ exports.syncCashTransactions = async (req, res) => {
     // Create cash transactions for each stock transaction
     for (const transaction of transactions) {
       const cashAmount = transaction.quantity * transaction.purchase_price;
-      // Determine transaction type, ensuring to trim any whitespace
-      const isBuy = transaction.type?.trim().toUpperCase() === 'BUY';
+      // Determine transaction type from description
+      const isBuy = transaction.description?.toUpperCase().startsWith('BUY') || 
+                   transaction.type?.toUpperCase() === 'BUY';
 
       // Create cash transaction record with correct sign
       const cashTransaction = await db.CashTransaction.create({
@@ -285,8 +286,7 @@ exports.syncCashTransactions = async (req, res) => {
         id: cashTransaction.id,
         user_id: cashTransaction.user_id,
         type: cashTransaction.transaction_type,
-        amount: cashTransaction.amount,
-        isBuy: isBuy
+        amount: cashTransaction.amount
       });
     }
 

@@ -19,6 +19,8 @@ exports.loadTemplateData = async (req, res) => {
     const sheetName = workbook.SheetNames[0];
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
+    console.log('Raw Excel data:', JSON.stringify(data, null, 2));
+
     if (!data || data.length === 0) {
       return res.status(400).json({ 
         error: 'Template file is empty or improperly formatted' 
@@ -45,7 +47,7 @@ exports.loadTemplateData = async (req, res) => {
         ticker: tickerValue.trim(),
         quantity: parseFloat(row.quantity),
         purchase_price: parseFloat(row.purchase_price || row.price),
-        type: type.trim(),
+        type: type,
         purchase_date: purchase_date ? purchase_date.trim() : null,
         remaining_shares: parseFloat(row.quantity),
         current_price: parseFloat(row.purchase_price || row.price),
@@ -54,8 +56,11 @@ exports.loadTemplateData = async (req, res) => {
         portfolio_id: portfolio_id
       };
 
+      console.log('Transformed row:', transformedRow);
       return transformedRow;
     });
+
+    console.log('Transformed data:', JSON.stringify(transformedData, null, 2));
 
     const requiredFields = ['ticker', 'quantity', 'purchase_price', 'type', 'purchase_date', 'portfolio_id'];
     const firstRow = transformedData[0];
@@ -81,14 +86,20 @@ exports.loadTemplateData = async (req, res) => {
 
     for (const row of transformedData) {
       try {
+        console.log('Attempting to insert row:', JSON.stringify(row, null, 2));
+        
         const transaction = await db.Transaction.create(row, { transaction: t });
 
         // Calculate cash impact
         const cashAmount = row.quantity * row.purchase_price;
-        const isBuy = row.type.trim() === 'BUY';
+        const isBuy = row.type === 'BUY';
         
         // Update user's cash balance
-        currentBalance += isBuy ? -cashAmount : cashAmount;
+        if (isBuy) {
+          currentBalance -= cashAmount;
+        } else {
+          currentBalance += cashAmount;
+        }
 
         // Create cash transaction record
         await db.CashTransaction.create({
@@ -97,9 +108,10 @@ exports.loadTemplateData = async (req, res) => {
           amount: isBuy ? -cashAmount : cashAmount,
           balance_after: currentBalance,
           related_stock_transaction_id: transaction.purchase_id,
-          description: `${row.type.trim()} ${row.quantity} shares of ${row.ticker} at ${row.purchase_price}`
+          description: `${row.type} ${row.quantity} shares of ${row.ticker} at ${row.purchase_price}`
         }, { transaction: t });
 
+        console.log('Successfully inserted transaction:', JSON.stringify(transaction, null, 2));
         results.success++;
       } catch (error) {
         console.error('Failed to insert row:', JSON.stringify(row, null, 2));
@@ -149,8 +161,7 @@ exports.createTransaction = async (req, res) => {
     }
 
     const validTypes = ['BUY', 'SELL'];
-    const upperType = type.trim().toUpperCase();
-    if (!validTypes.includes(upperType)) {
+    if (!validTypes.includes(type.toUpperCase())) {
       return res.status(400).json({ 
         error: 'Invalid transaction type. Must be either BUY or SELL.' 
       });
@@ -159,7 +170,7 @@ exports.createTransaction = async (req, res) => {
     // Get user's current cash balance
     const user = await db.User.findByPk(req.user.id, { transaction: t });
     const cashAmount = parseFloat(quantity) * parseFloat(purchase_price);
-    const isBuy = upperType === 'BUY';
+    const isBuy = type.toUpperCase() === 'BUY';
 
     // Check if user has enough cash for buy transaction
     if (isBuy && parseFloat(user.cashBalance) < cashAmount) {
@@ -169,12 +180,11 @@ exports.createTransaction = async (req, res) => {
       });
     }
 
-    // Create the transaction record
     const transaction = await db.Transaction.create({
       ticker: ticker.toUpperCase().trim(),
       quantity: parseFloat(quantity),
       purchase_price: parseFloat(purchase_price),
-      type: upperType,
+      type: type.toUpperCase(),
       purchase_date: new Date(purchase_date),
       portfolio_id: req.user.id,
       remaining_shares: parseFloat(quantity),
@@ -182,8 +192,11 @@ exports.createTransaction = async (req, res) => {
       cost_basis: parseFloat(quantity) * parseFloat(purchase_price)
     }, { transaction: t });
 
-    // Update user's cash balance based on transaction type
-    const newBalance = parseFloat(user.cashBalance) + (isBuy ? -cashAmount : cashAmount);
+    // Update user's cash balance
+    const newBalance = isBuy 
+      ? parseFloat(user.cashBalance) - cashAmount 
+      : parseFloat(user.cashBalance) + cashAmount;
+
     await user.update({ cashBalance: newBalance }, { transaction: t });
 
     // Create cash transaction record
@@ -193,7 +206,7 @@ exports.createTransaction = async (req, res) => {
       amount: isBuy ? -cashAmount : cashAmount,
       balance_after: newBalance,
       related_stock_transaction_id: transaction.purchase_id,
-      description: `${upperType} ${quantity} shares of ${ticker.toUpperCase()} at ${purchase_price}`
+      description: `${type.toUpperCase()} ${quantity} shares of ${ticker.toUpperCase()} at ${purchase_price}`
     }, { transaction: t });
 
     await t.commit();
@@ -265,18 +278,33 @@ exports.syncCashTransactions = async (req, res) => {
 
     // Create cash transactions for each stock transaction
     for (const transaction of transactions) {
-      const cashAmount = transaction.quantity * transaction.purchase_price;
-      // Determine transaction type, ensuring to trim any whitespace
-      const isBuy = transaction.type?.trim().toUpperCase() === 'BUY';
+      // Log transaction details for debugging
+      console.log('Processing transaction:', {
+        id: transaction.purchase_id,
+        portfolio_id: transaction.portfolio_id,
+        type: transaction.type,
+        ticker: transaction.ticker,
+        quantity: transaction.quantity,
+        price: transaction.purchase_price
+      });
 
-      // Create cash transaction record with correct sign
+      const cashAmount = transaction.quantity * transaction.purchase_price;
+      const isBuy = transaction.type === 'BUY'; // Directly use the transaction type
+
+      console.log('Transaction details:', {
+        isBuy,
+        cashAmount,
+        type: transaction.type
+      });
+
+      // Create cash transaction record
       const cashTransaction = await db.CashTransaction.create({
-        user_id: transaction.portfolio_id,
+        user_id: transaction.portfolio_id, // Use the transaction's portfolio_id
         transaction_type: isBuy ? 'STOCK_BUY' : 'STOCK_SELL',
-        amount: isBuy ? -cashAmount : cashAmount,
-        balance_after: 0, // Will be updated in the next pass
+        amount: isBuy ? -Math.abs(cashAmount) : Math.abs(cashAmount), // Ensure proper sign based on transaction type
+        balance_after: 0, // This will be updated in a separate pass
         related_stock_transaction_id: transaction.purchase_id,
-        description: `${isBuy ? 'BUY' : 'SELL'} ${transaction.quantity} shares of ${transaction.ticker} at ${transaction.purchase_price}`,
+        description: `${transaction.type} ${transaction.quantity} shares of ${transaction.ticker} at ${transaction.purchase_price}`,
         created_at: transaction.purchase_date,
         updated_at: transaction.purchase_date
       }, { transaction: t });
@@ -285,8 +313,7 @@ exports.syncCashTransactions = async (req, res) => {
         id: cashTransaction.id,
         user_id: cashTransaction.user_id,
         type: cashTransaction.transaction_type,
-        amount: cashTransaction.amount,
-        isBuy: isBuy
+        amount: cashTransaction.amount
       });
     }
 
