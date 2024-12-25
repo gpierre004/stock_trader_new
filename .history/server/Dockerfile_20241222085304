@@ -1,0 +1,38 @@
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install build dependencies and postgresql-client for pg_isready
+RUN apk add --no-cache python3 make g++ postgresql-client
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm install
+
+# Copy source code and initialization script
+COPY . .
+COPY init-db.sh /init-db.sh
+
+# Make the initialization script executable
+RUN chmod +x /init-db.sh
+
+# Create .sequelizerc if it doesn't exist
+RUN echo "const path = require('path');\n\
+module.exports = {\n\
+  'config': path.resolve('config', 'database.js'),\n\
+  'models-path': path.resolve('src', 'models'),\n\
+  'seeders-path': path.resolve('seeders'),\n\
+  'migrations-path': path.resolve('migrations')\n\
+};" > .sequelizerc
+
+# Expose port
+EXPOSE 5000
+
+# Set environment to production
+ENV NODE_ENV=production
+
+# Run initialization script and then start the application
+CMD ["/bin/sh", "-c", "/init-db.sh && npm start"]

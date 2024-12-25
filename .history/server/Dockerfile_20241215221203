@@ -1,0 +1,25 @@
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install build dependencies and netcat
+RUN apk add --no-cache python3 make g++ netcat-openbsd
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 5000
+
+# Set environment to production
+ENV NODE_ENV=production
+
+# Start command is defined in docker-compose.yml to ensure proper startup sequence
+CMD ["npm", "start"]
