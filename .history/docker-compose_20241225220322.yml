@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    container_name: stock-trader-postgres
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1215
+      POSTGRES_DB: postgress
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"  # Changed from 5433 to match the default port
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgress"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  pgadmin:
+    container_name: stock-trader-pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend:
+    container_name: stock-trader-backend
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=postgress
+      - DB_USER=postgres
+      - DB_PASSWORD=1215
+      - JWT_SECRET=your-super-secret-jwt-key-for-stock-trader
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    container_name: stock-trader-frontend
+    build: 
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=/api
+    ports:
+      - "3001:80"
+    environment:
+      - REACT_APP_API_URL=/api
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    name: stock-trader-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: stock-trader-postgres-data
+  pgadmin_data:
+    name: stock-trader-pgadmin-data
